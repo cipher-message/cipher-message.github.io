@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en" data-cipher-ad-unit="mobile"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="strict-origin-when-cross-origin"><meta name="robots" content="noindex,nofollow">
+<title>Advertisement</title>
+<style>html,body{margin:0;padding:0;width:320px;height:50px;overflow:hidden;background:transparent}</style>
+</head><body>
+<script>
+  atOptions = {
+    'key' : '6c92ed69d54bffccb29056a0761d1344',
+    'format' : 'iframe',
+    'height' : 50,
+    'width' : 320,
+    'params' : {}
+  };
+</script>
+<script src="https://bicea.org/22/6c92ed69d54bffccb29056a0761d1344"></script>
+<script id="cipherAdSafetyScanner">(() => {
+  'use strict';
+  const tag='cipher-ad-safety-v2';
+  const unit=document.documentElement.dataset.cipherAdUnit;
+  if(!unit||window.parent===window) return;
+  const nonce=new URLSearchParams(location.search).get('safetyRefresh')||'initial';
+  const send=(kind,extra={},transfer=[])=>{try{parent.postMessage({tag,unit,nonce,kind,...extra},'*',transfer);}catch(_) {}};
+  const domainPattern=/(?:pornhub|xvideos|xhamster|xnxx|youporn|redtube|brazzers|chaturbate|stripchat|onlyfans|fansly|spankbang|eporner|beeg|xv(?:ideos)?\.com)/i;
+  const phrasePattern=/\b(?:free\s+porn|watch\s+porn|hardcore\s+porn|sex\s+videos?|live\s+sex\s+cams?|adult\s+sex\s+chat|xxx\s+video)\b/i;
+  // Text-based names should be detected even when a banner is just a logo with no nudity.
+  const normalize=t=>String(t||'').toLowerCase().replace(/0/g,'o').replace(/[|!]/g,'i').replace(/[^a-z]/g,'');
+  const hasAdultText=t=>domainPattern.test(String(t||''))||phrasePattern.test(String(t||''))||
+    /(?:pornhub|xvideos|xhamster|xnxx|youporn|brazzers|chaturbate|stripchat|onlyfans)/.test(normalize(t));
+  const maxImages=3, maxDocs=8, maxElements=180;
+  let flagged=false, imagesSeen=0, unreadable=0, ocrErrors=0, scanTimer=0, stopped=false;
+  const seenImages=new WeakSet(), watchedDocs=new WeakSet();
+  const observers=[];
+  let ocrQueue=Promise.resolve(), ocrWorker=null, ocrLoader=null, ocrCount=0;
+  const flag=reason=>{if(flagged)return;flagged=true;send('flag',{reason});cleanup();};
+  const status=text=>send('scan-status',{status:text,unreadable,ocrErrors});
+  function cleanup() {
+    stopped=true; clearTimeout(scanTimer);
+    for(const o of observers)o.disconnect();
+    if(ocrWorker) Promise.resolve().then(()=>ocrWorker.terminate()).catch(()=>{});
+    ocrWorker=null;
+  }
+  function loadOCR() {
+    if(ocrLoader)return ocrLoader;
+    ocrLoader=new Promise((resolve,reject)=>{
+      if(window.Tesseract?.createWorker){resolve(window.Tesseract);return;}
+      const s=document.createElement('script');
+      s.src='https://cdn.jsdelivr.net/npm/tesseract.js@7.0.0/dist/tesseract.min.js';
+      s.referrerPolicy='no-referrer';
+      s.onload=()=>window.Tesseract?.createWorker?resolve(window.Tesseract):reject(Error('OCR unavailable'));
+      s.onerror=()=>reject(Error('OCR script unavailable'));
+      document.head.appendChild(s);
+    });
+    return ocrLoader;
+  }
+  async function ocrRead(canvas) {
+    if(flagged||stopped||ocrCount>=2)return;
+    ocrCount++;
+    status('checking readable ad text');
+    try {
+      const lib=await loadOCR();
+      if(flagged||stopped)return;
+      if(!ocrWorker)ocrWorker=await lib.createWorker('eng',1,{logger:()=>{}});
+      if(flagged||stopped)return;
+      const result=await ocrWorker.recognize(canvas);
+      const text=String(result?.data?.text||'').slice(0,2500);
+      if(hasAdultText(text)) flag('ocr-adult-brand');
+      else status('readable image checked');
+    } catch(e) {ocrErrors++;status('OCR unavailable for some images');}
+  }
+  function sample(img) {
+    if(flagged||stopped||seenImages.has(img)||imagesSeen>=maxImages)return;
+    seenImages.add(img);
+    const check=()=>{
+      if(flagged||stopped||imagesSeen>=maxImages)return;
+      const w=img.naturalWidth||0, h=img.naturalHeight||0;
+      if(w<110||h<32)return;
+      try {
+        const c=document.createElement('canvas'); c.width=c.height=224;
+        const context=c.getContext('2d',{willReadFrequently:true});
+        context.drawImage(img,0,0,224,224);
+        const pixels=context.getImageData(0,0,224,224).data.buffer;
+        imagesSeen++;
+        send('pixels',{pixels},[pixels]);
+        // Keep banners sharp enough for OCR (logo text is hard to read at 224px).
+        const scaled=document.createElement('canvas');
+        const scale=Math.min(1,1100/w,640/h);
+        scaled.width=Math.max(1,Math.floor(w*scale));
+        scaled.height=Math.max(1,Math.floor(h*scale));
+        scaled.getContext('2d').drawImage(img,0,0,scaled.width,scaled.height);
+        // OCR is lazy, and stays entirely inside this sandboxed ad helper.
+        ocrQueue=ocrQueue.then(()=>ocrRead(scaled));
+      } catch(_) {unreadable++; status('some ad images cannot be inspected');}
+    };
+    if(img.complete&&img.naturalWidth)check();
+    else img.addEventListener('load',check,{once:true});
+  }
+  function scanDocument(doc) {
+    if(flagged||stopped) return;
+    try {
+      if(!watchedDocs.has(doc)){
+        watchedDocs.add(doc);
+        const observer=new MutationObserver(schedule);
+        observer.observe(doc.documentElement,{childList:true,subtree:true,attributes:true,attributeFilter:['src','href','alt','title','aria-label','style']});
+        observers.push(observer);
+      }
+      let count=0;
+      for(const el of doc.querySelectorAll('a[href],area[href],iframe[src],iframe[srcdoc],img[src],img[alt],[aria-label],[title]')){
+        if(++count>maxElements)break;
+        const value=[el.getAttribute('href'),el.getAttribute('src'),el.getAttribute('srcdoc'),el.getAttribute('alt'),el.getAttribute('title'),el.getAttribute('aria-label'),el.tagName==='A'?el.textContent:null].filter(Boolean).join(' ');
+        if(hasAdultText(value)){flag('adult-site-link-or-label');return;}
+        if(el.tagName==='IMG')sample(el);
+      }
+      const bodyText=doc.body?.innerText?.slice(0,4500)||'';
+      if(hasAdultText(bodyText)){flag('adult-site-visible-text');return;}
+      // CSS backgrounds can be readable even when ads don't use <img> tags.
+      if(imagesSeen<maxImages) {
+        let backgrounds=0;
+        for(const el of doc.querySelectorAll('[style*="background"]')) {
+          if(++backgrounds>6)break;
+          const match=el.style.backgroundImage?.match(/url\(["']?([^"')]+)["']?\)/);
+          if(match){const image=new Image();image.crossOrigin='anonymous';image.src=match[1];sample(image);}
+        }
+      }
+    } catch(_) {unreadable++;}
+  }
+  function scan() {
+    if(flagged||stopped)return;
+    // Recursively inspect only frames where same-origin access actually succeeds.
+    const pending=[document], visited=new Set();
+    while(pending.length&&visited.size<maxDocs){
+      const doc=pending.shift();
+      if(visited.has(doc))continue;
+      visited.add(doc);scanDocument(doc);
+      if(flagged)return;
+      try{
+        for(const frame of doc.querySelectorAll('iframe,frame')){
+          try{if(frame.contentDocument?.documentElement)pending.push(frame.contentDocument);}
+          catch(_){unreadable++;}
+        }
+      }catch(_){}
+    }
+    status(unreadable?'partial scan (some frames restricted)':'checking visible ad resources');
+  }
+  function schedule(){clearTimeout(scanTimer);scanTimer=setTimeout(scan,220);}
+  scan();
+  [700,1800,3800,7200,13000].forEach(ms=>setTimeout(scan,ms));
+  setTimeout(()=>{if(!flagged){status(unreadable?'limited: cross-origin content unavailable':'inspection window complete');cleanup();}},18000);
+})();</script>
+</body></html>
